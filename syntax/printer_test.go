@@ -417,8 +417,11 @@ func TestPrintWeirdFormat(t *testing.T) {
 
 	parser := NewParser(KeepComments)
 	printer := NewPrinter()
+	n := 0
 	for i, tc := range weirdFormats {
 		check := func(t *testing.T, in, want string) {
+			ioutil.WriteFile(fmt.Sprintf("../corpus/printer-%03d", n), []byte(in), 0644)
+			n++
 			prog, err := parser.Parse(newStrictReader(in), "")
 			if err != nil {
 				t.Fatalf("Unexpected error in %q: %v", in, err)

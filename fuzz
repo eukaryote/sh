@@ -1,0 +1,8 @@
+#!/bin/sh
+
+set -e -x
+
+mkdir -p corpus
+go test -short ./...
+go-fuzz-build mvdan.cc/sh
+go-fuzz -bin=./sh-fuzz.zip -workdir=.

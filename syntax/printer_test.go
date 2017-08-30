@@ -420,7 +420,8 @@ func TestPrintWeirdFormat(t *testing.T) {
 	n := 0
 	for i, tc := range weirdFormats {
 		check := func(t *testing.T, in, want string) {
-			ioutil.WriteFile(fmt.Sprintf("../corpus/printer-%03d", n), []byte(in), 0644)
+			ioutil.WriteFile(fmt.Sprintf("../corpus/printer-%03d", n),
+				append([]byte{0}, []byte(in)...), 0644)
 			n++
 			prog, err := parser.Parse(newStrictReader(in), "")
 			if err != nil {

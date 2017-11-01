@@ -25,6 +25,14 @@ func BinaryNextLine(p *Printer) { p.binNextLine = true }
 // case bodies will be two levels deeper than the switch itself.
 func SwitchCaseIndent(p *Printer) { p.swtCaseIndent = true }
 
+// OutputStyleDefault uses the default output style.
+func OutputStyleDefault(p *Printer) { p.OutputStyle = "default" }
+
+// OutputStyleSpacey uses a newline instead of a semicolon before
+// 'then', 'do', etc., and expands one liners such as
+// 'func(x) { echo $x; }' to multiple lines.
+func OutputStyleSpacey(p *Printer) { p.OutputStyle = "spacey" }
+
 // NewPrinter allocates a new Printer and applies any number of options.
 func NewPrinter(options ...func(*Printer)) *Printer {
 	p := &Printer{
@@ -62,10 +70,12 @@ type Printer struct {
 	indentSpaces  uint
 	binNextLine   bool
 	swtCaseIndent bool
+	OutputStyle   string
 
 	wantSpace   bool
 	wantNewline bool
 	wroteSemi   bool
+	Debug       bool
 
 	commentPadding uint
 
@@ -125,9 +135,13 @@ func (p *Printer) spacedString(s string) {
 }
 
 func (p *Printer) semiOrNewl(s string, pos Pos) {
-	if p.wantNewline {
+	if p.Debug {
+		p.WriteString("<semiOrNewline>")
+	}
+	if p.wantNewline || p.OutputStyle == "spacey" {
 		p.newline(pos)
 		p.indent()
+		p.wantNewline = false
 	} else {
 		if !p.wroteSemi {
 			p.WriteByte(';')
@@ -137,6 +151,10 @@ func (p *Printer) semiOrNewl(s string, pos Pos) {
 	}
 	p.WriteString(s)
 	p.wantSpace = true
+	p.wantNewline = false
+	if p.Debug {
+		p.WriteString("</semiOrNewline>")
+	}
 }
 
 func (p *Printer) incLevel() {
@@ -172,6 +190,9 @@ func (p *Printer) indent() {
 }
 
 func (p *Printer) newline(pos Pos) {
+	if p.Debug {
+		p.WriteString("<newline>")
+	}
 	p.wantNewline, p.wantSpace = false, false
 	p.WriteByte('\n')
 	if p.line < pos.Line() {
@@ -189,9 +210,15 @@ func (p *Printer) newline(pos Pos) {
 		p.WriteByte('\n')
 		p.wantSpace = false
 	}
+	if p.Debug {
+		p.WriteString("</newline>")
+	}
 }
 
 func (p *Printer) newlines(pos Pos) {
+	if p.Debug {
+		p.WriteString("<newlines>")
+	}
 	p.newline(pos)
 	if pos.Line() > p.line {
 		// preserve single empty lines
@@ -199,6 +226,9 @@ func (p *Printer) newlines(pos Pos) {
 		p.line++
 	}
 	p.indent()
+	if p.Debug {
+		p.WriteString("</newlines>")
+	}
 }
 
 func (p *Printer) rightParen(pos Pos) {
@@ -210,7 +240,10 @@ func (p *Printer) rightParen(pos Pos) {
 }
 
 func (p *Printer) semiRsrv(s string, pos Pos, fallback bool) {
-	if p.wantNewline || pos.Line() > p.line {
+	if p.Debug {
+		p.WriteString("<semiRsrv>")
+	}
+	if p.OutputStyle == "spacey" || p.wantNewline || pos.Line() > p.line {
 		p.newlines(pos)
 	} else {
 		if fallback && !p.wroteSemi {
@@ -222,6 +255,9 @@ func (p *Printer) semiRsrv(s string, pos Pos, fallback bool) {
 	}
 	p.WriteString(s)
 	p.wantSpace = true
+	if p.Debug {
+		p.WriteString("</semiRsrv>")
+	}
 }
 
 func (p *Printer) comment(c Comment) {
@@ -612,6 +648,9 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 	case *Block:
 		p.WriteByte('{')
 		p.wantSpace = true
+		if p.OutputStyle == "spacey" {
+			p.wantNewline = true
+		}
 		p.nestedStmts(x.StmtList, x.Rbrace)
 		p.semiRsrv("}", x.Rbrace, true)
 	case *IfClause:
@@ -629,6 +668,9 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		}
 		p.nestedStmts(x.Cond, Pos{})
 		p.semiOrNewl("do", x.DoPos)
+		if p.OutputStyle == "spacey" && len(x.Do.Stmts) == 1 {
+			p.wantNewline = true
+		}
 		p.nestedStmts(x.Do, Pos{})
 		p.semiRsrv("done", x.DonePos, true)
 	case *ForClause:
@@ -639,6 +681,9 @@ func (p *Printer) command(cmd Command, redirs []*Redirect) (startRedirs int) {
 		}
 		p.loop(x.Loop)
 		p.semiOrNewl("do", x.DoPos)
+		if p.OutputStyle == "spacey" && len(x.Do.Stmts) == 1 {
+			p.wantNewline = true
+		}
 		p.nestedStmts(x.Do, Pos{})
 		p.semiRsrv("done", x.DonePos, true)
 	case *BinaryCmd:
@@ -786,8 +831,14 @@ func (p *Printer) ifClause(ic *IfClause, elif bool) {
 	if !elif {
 		p.spacedString("if")
 	}
+	if p.OutputStyle == "spacey" && len(ic.Then.Stmts) == 1 {
+		p.wantNewline = false
+	}
 	p.nestedStmts(ic.Cond, Pos{})
 	p.semiOrNewl("then", ic.ThenPos)
+	if p.OutputStyle == "spacey" && len(ic.Then.Stmts) == 1 {
+		p.wantNewline = true
+	}
 	p.nestedStmts(ic.Then, Pos{})
 	if ic.FollowedByElif() {
 		p.semiRsrv("elif", ic.ElsePos, true)
@@ -823,6 +874,9 @@ func (p *Printer) hasInline(s *Stmt) bool {
 }
 
 func (p *Printer) stmts(sl StmtList) {
+	if p.Debug {
+		p.WriteString("<stmts>")
+	}
 	switch len(sl.Stmts) {
 	case 0:
 		p.comments(sl.Last)
@@ -839,6 +893,9 @@ func (p *Printer) stmts(sl StmtList) {
 			p.comment(c)
 		}
 		if pos.Line() <= p.line {
+			if p.OutputStyle == "spacey" && p.line > 0 && p.wantNewline {
+				p.newlines(pos)
+			}
 			p.stmt(s)
 		} else {
 			if p.line > 0 {
@@ -902,6 +959,9 @@ func (p *Printer) stmts(sl StmtList) {
 	}
 	p.wantNewline = true
 	p.comments(sl.Last)
+	if p.Debug {
+		p.WriteString("</stmts>")
+	}
 }
 
 type byteCounter int
@@ -945,13 +1005,20 @@ func (p *Printer) stmtCols(s *Stmt) int {
 }
 
 func (p *Printer) nestedStmts(sl StmtList, closing Pos) {
+	if p.Debug {
+		p.WriteString("<nestedStmts>")
+	}
 	p.incLevel()
 	if len(sl.Stmts) == 1 && closing.Line() > p.line && sl.Stmts[0].End().Line() <= p.line {
 		p.newline(Pos{})
 		p.indent()
+		p.wantNewline = false
 	}
 	p.stmts(sl)
 	p.decLevel()
+	if p.Debug {
+		p.WriteString("</nestedStmts>")
+	}
 }
 
 func (p *Printer) assigns(assigns []*Assign, alwaysEqual bool) {

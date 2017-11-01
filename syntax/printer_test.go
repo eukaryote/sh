@@ -675,3 +675,44 @@ func TestPrintSwitchCaseIndent(t *testing.T) {
 		})
 	}
 }
+
+func TestPrintSpaceyStyle(t *testing.T) {
+	var tests = [...]printCase{
+		{
+			"if [[ -n $myvar ]]; then \necho $myvar\nfi",
+			"if [[ -n $myvar ]]\nthen\n\techo $myvar\nfi",
+		},
+		{
+			"for word in foo bar; do echo $word; done",
+			"for word in foo bar\ndo\n\techo $word\ndone",
+		},
+		{
+			"myfunc() { echo 1; }",
+			"myfunc() {\n\techo 1\n}",
+		},
+		{
+			"myfunc() { echo 1; echo 2; }",
+			"myfunc() {\n\techo 1\n\techo 2\n}",
+		},
+		samePrint("case $i in\n#foo\nesac"),
+	}
+	parser := NewParser(KeepComments)
+	printer := NewPrinter(OutputStyleSpacey)
+	for i, tc := range tests {
+		t.Run(fmt.Sprintf("%03d", i), func(t *testing.T) {
+			prog, err := parser.Parse(strings.NewReader(tc.in), "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := tc.want + "\n"
+			got, err := strPrint(printer, prog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != want {
+				t.Fatalf("Print mismatch:\nin:\n%s\nwant:\n%sgot:\n%s",
+					tc.in, want, got)
+			}
+		})
+	}
+}

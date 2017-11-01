@@ -26,6 +26,8 @@ var (
 	binNext     = flag.Bool("bn", false, "binary ops like && and | may start a line")
 	caseIndent  = flag.Bool("ci", false, "switch cases will be indented")
 	toJSON      = flag.Bool("exp.tojson", false, "print AST to stdout as a typed JSON")
+	style       = flag.String("style", "default", "use output format style ('default' or 'spacey')")
+	debug       = flag.Bool("debug", false, "print AST debug info")
 	showVersion = flag.Bool("version", false, "show version and exit")
 
 	parser            *syntax.Parser
@@ -54,6 +56,8 @@ func main() {
   -i uint   indent: 0 for tabs (default), >0 for number of spaces
   -bn       binary ops like && and | may start a line
   -ci       switch cases will be indented
+  -style    use output format style ('default' or 'spacey')
+  -debug    print AST debug info
 
   -exp.tojson  print AST to stdout as a typed JSON
 `)
@@ -79,6 +83,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "unknown shell language: %s\n", *langStr)
 		os.Exit(1)
 	}
+	outputStyle := "default"
+	switch *style {
+	case "spacey":
+		outputStyle = "spacey"
+	case "default":
+		break
+	default:
+		fmt.Fprintf(os.Stderr, "unknown output style: %s\n", *style)
+		os.Exit(1)
+	}
 	if *posix {
 		lang = syntax.LangPOSIX
 	}
@@ -90,6 +104,14 @@ func main() {
 		}
 		if *caseIndent {
 			syntax.SwitchCaseIndent(p)
+		}
+		if outputStyle == "spacey" {
+			syntax.OutputStyleSpacey(p)
+		} else {
+			syntax.OutputStyleDefault(p)
+		}
+		if *debug {
+			(*p).Debug = true
 		}
 	})
 	if flag.NArg() == 0 {
